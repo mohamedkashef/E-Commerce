@@ -21,7 +21,8 @@
           }
         ],
         "styles": ["apps/E-Commerce/src/styles.css"],
-        "server": "apps/E-Commerce/src/main.server.ts",
+        "server": "apps/E-Commerce/src/main-server.ts",
+        "serverFileName": "main-server.js",
         "ssr": {
           "entry": "apps/E-Commerce/src/server.ts"
         },
