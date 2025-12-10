@@ -4,34 +4,96 @@ orbs:
   nx: nrwl/nx@1.7.0
 
 jobs:
-  main:
+  build_and_deploy:
     docker:
       - image: cimg/node:lts-browsers
+
     steps:
       - checkout
 
-      # This enables task distribution via Nx Cloud
-      # Run this command as early as possible, before dependencies are installed
-      # Learn more at https://nx.dev/ci/reference/nx-cloud-cli#npx-nxcloud-startcirun
-      # Uncomment this line to enable task distribution
-      # - run: npx nx start-ci-run --distribute-on="3 linux-medium-js" --stop-agents-after="e2e-ci"
-
+      # تثبيت الحزم الأساسية
       - run: npm ci
       - run: npx playwright install --with-deps
 
-      # Prepend any command with "nx-cloud record --" to record its logs to Nx Cloud
-      # - run: npx nx-cloud record -- echo Hello World
-      # When you enable task distribution, run the e2e-ci task instead of e2e
+      # تثبيت Netlify CLI
       - run:
-          command: npx nx run-many -t lint test build e2e
-      # Nx Cloud recommends fixes for failures to help you get CI green faster. Learn more: https://nx.dev/ci/features/self-healing-ci
+          name: Install Netlify CLI
+          command: npm install -g netlify-cli
+
+      # 🔥 تحديد البيئة حسب الفرع
+      - run:
+          name: Select Environment (Prod / Dev / Staging)
+          command: |
+            if [ "${CIRCLE_BRANCH}" == "main" ]; then
+              echo "📦 Environment: PRODUCTION"
+              export BUILD_ENV=production
+              export NETLIFY_SITE_ID=$NETLIFY_SITE_ID_PROD
+
+            elif [ "${CIRCLE_BRANCH}" == "development" ]; then
+              echo "📦 Environment: DEVELOPMENT"
+              export BUILD_ENV=development
+              export NETLIFY_SITE_ID=$NETLIFY_SITE_ID_DEV
+
+            elif [ "${CIRCLE_BRANCH}" == "staging" ]; then
+              echo "📦 Environment: STAGING"
+              export BUILD_ENV=staging
+              export NETLIFY_SITE_ID=$NETLIFY_SITE_ID_STAGING
+
+            else
+              echo "❌ Unknown branch -- stopping"
+              exit 1
+            fi
+
+            # حفظ المتغيرات للـ steps التالية
+            echo "BUILD_ENV=$BUILD_ENV" >> $BASH_ENV
+            echo "NETLIFY_SITE_ID=$NETLIFY_SITE_ID" >> $BASH_ENV
+
+      # Source ENV variables
+      - run: source $BASH_ENV
+
+      # 🌟 Deployment Marker
+      - run:
+          name: Plan a deploy
+          command: |
+            circleci run release plan \
+              --environment-name="$BUILD_ENV" \
+              --component-name="E-Commerce" \
+              --target-version="$CIRCLE_SHA1"
+
+      # 🌟 Build Angular SSR
+      - run:
+          name: Build Angular SSR App
+          command: |
+            npx nx build E-Commerce --configuration=$BUILD_ENV
+
+      # 🌟 Deploy to Netlify (browser folder for SSR plugin)
+      - run:
+          name: Deploy to Netlify (SSR)
+          command: |
+            netlify deploy \
+              --prod \
+              --auth $NETLIFY_AUTH_TOKEN \
+              --site $NETLIFY_SITE_ID \
+              --dir=dist/apps/E-Commerce/browser
+
+      # 🌟 Update deployment status
+      - run:
+          name: Update Deployment to SUCCESS
+          command: circleci run release update --status=SUCCESS
+          when: on_success
+
+      - run:
+          name: Update Deployment to FAILED
+          command: circleci run release update --status=FAILED
+          when: on_fail
+
+      # إصلاح CI في Nx Cloud (اختياري)
       - run:
           command: npx nx fix-ci
           when: always
 
 workflows:
   version: 2
-
-  ci:
+  deploy:
     jobs:
-      - main
+      - build_and_deploy
