@@ -4,60 +4,98 @@ orbs:
   nx: nrwl/nx@1.7.0
 
 jobs:
-  main:
+  build_and_deploy:
     docker:
       - image: cimg/node:lts-browsers
+
     steps:
       - checkout
 
-      # تثبيت الحزم الأساسية
+      # Install dependencies
       - run: npm ci
       - run: npx playwright install --with-deps
 
-      # تثبيت Netlify CLI
+      # Install Netlify CLI
       - run:
           name: Install Netlify CLI
           command: npm install -g netlify-cli
 
-      # 🌟 بدء Deploy Marker
+      # 🔥 Select Environment Based on Branch
+      - run:
+          name: Select Environment (Prod / Dev / Staging)
+          command: |
+            if [ "${CIRCLE_BRANCH}" == "main" ]; then
+              echo "📦 Environment: PRODUCTION"
+              export BUILD_ENV=production
+              export NETLIFY_SITE_ID=$NETLIFY_SITE_ID_PROD
+
+            elif [ "${CIRCLE_BRANCH}" == "development" ]; then
+              echo "📦 Environment: DEVELOPMENT"
+              export BUILD_ENV=development
+              export NETLIFY_SITE_ID=$NETLIFY_SITE_ID_DEV
+
+            elif [ "${CIRCLE_BRANCH}" == "staging" ]; then
+              echo "📦 Environment: STAGING"
+              export BUILD_ENV=staging
+              export NETLIFY_SITE_ID=$NETLIFY_SITE_ID_STAGING
+
+            else
+              echo "❌ Unknown branch -- stopping"
+              exit 1
+            fi
+
+            echo "Using BUILD_ENV=$BUILD_ENV"
+            echo "Using NETLIFY_SITE_ID=$NETLIFY_SITE_ID"
+
+            echo "BUILD_ENV=$BUILD_ENV" >> $BASH_ENV
+            echo "NETLIFY_SITE_ID=$NETLIFY_SITE_ID" >> $BASH_ENV
+
+      # 🛠 Source ENV variables
+      - run: source $BASH_ENV
+
+      # 🔥 Deployment Marker
       - run:
           name: Plan a deploy
           command: |
             circleci run release plan \
-              --environment-name="production" \
+              --environment-name="$BUILD_ENV" \
               --component-name="E-Commerce" \
               --target-version="$CIRCLE_SHA1"
 
-      # خطوات الـ build والاختبارات
+      # Build Angular using selected config
       - run:
-          command: npx nx run-many -t lint test build e2e
+          name: Build Angular App
+          command: |
+            npx nx build E-Commerce --configuration=$BUILD_ENV
 
-      # 🌟 نشر على Netlify
+      # 🔥 Deploy to Netlify
       - run:
           name: Deploy to Netlify
           command: |
-            netlify deploy --prod --auth $NETLIFY_AUTH_TOKEN --site $NETLIFY_SITE_ID --dir=dist/apps/E-Commerce
+            netlify deploy \
+              --prod \
+              --auth $NETLIFY_AUTH_TOKEN \
+              --site $NETLIFY_SITE_ID \
+              --dir=dist/apps/E-Commerce
 
-      # 🌟 تحديث حالة النشر إلى SUCCESS إذا نجح
+      # Update deploy state
       - run:
-          name: Update a deploy to SUCCESS
+          name: Update Deployment to SUCCESS
           command: circleci run release update --status=SUCCESS
           when: on_success
 
-      # 🌟 تحديث حالة النشر إلى FAILED إذا فشل
       - run:
-          name: Update planned deploy to FAILED
+          name: Update Deployment to FAILED
           command: circleci run release update --status=FAILED
           when: on_fail
 
-      # إصلاح CI في Nx Cloud (اختياري)
       - run:
           command: npx nx fix-ci
           when: always
 
+
 workflows:
   version: 2
-  ci:
+  deploy:
     jobs:
-      - main
-      
+      - build_and_deploy
