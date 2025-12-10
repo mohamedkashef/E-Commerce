@@ -10,9 +10,14 @@ jobs:
     steps:
       - checkout
 
-      # تثبيت الحزم
+      # تثبيت الحزم الأساسية
       - run: npm ci
       - run: npx playwright install --with-deps
+
+      # تثبيت Netlify CLI
+      - run:
+          name: Install Netlify CLI
+          command: npm install -g netlify-cli
 
       # 🌟 بدء Deploy Marker
       - run:
