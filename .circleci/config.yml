@@ -11,16 +11,16 @@ jobs:
     steps:
       - checkout
 
-      # Install dependencies
+      # تثبيت الحزم الأساسية
       - run: npm ci
       - run: npx playwright install --with-deps
 
-      # Install Netlify CLI
+      # تثبيت Netlify CLI
       - run:
           name: Install Netlify CLI
           command: npm install -g netlify-cli
 
-      # 🔥 Select Environment Based on Branch
+      # 🔥 تحديد البيئة حسب الفرع
       - run:
           name: Select Environment (Prod / Dev / Staging)
           command: |
@@ -44,16 +44,14 @@ jobs:
               exit 1
             fi
 
-            echo "Using BUILD_ENV=$BUILD_ENV"
-            echo "Using NETLIFY_SITE_ID=$NETLIFY_SITE_ID"
-
+            # حفظ المتغيرات للـ steps التالية
             echo "BUILD_ENV=$BUILD_ENV" >> $BASH_ENV
             echo "NETLIFY_SITE_ID=$NETLIFY_SITE_ID" >> $BASH_ENV
 
-      # 🛠 Source ENV variables
+      # Source ENV variables
       - run: source $BASH_ENV
 
-      # 🔥 Deployment Marker
+      # 🌟 Deployment Marker
       - run:
           name: Plan a deploy
           command: |
@@ -62,23 +60,23 @@ jobs:
               --component-name="E-Commerce" \
               --target-version="$CIRCLE_SHA1"
 
-      # Build Angular using selected config
+      # 🌟 Build Angular SSR
       - run:
-          name: Build Angular App
+          name: Build Angular SSR App
           command: |
             npx nx build E-Commerce --configuration=$BUILD_ENV
 
-      # 🔥 Deploy to Netlify
+      # 🌟 Deploy to Netlify (browser folder for SSR plugin)
       - run:
-          name: Deploy to Netlify
+          name: Deploy to Netlify (SSR)
           command: |
             netlify deploy \
               --prod \
               --auth $NETLIFY_AUTH_TOKEN \
               --site $NETLIFY_SITE_ID \
-              --dir=dist/apps/E-Commerce
+              --dir=dist/apps/E-Commerce/browser
 
-      # Update deploy state
+      # 🌟 Update deployment status
       - run:
           name: Update Deployment to SUCCESS
           command: circleci run release update --status=SUCCESS
@@ -89,14 +87,13 @@ jobs:
           command: circleci run release update --status=FAILED
           when: on_fail
 
+      # إصلاح CI في Nx Cloud (اختياري)
       - run:
           command: npx nx fix-ci
           when: always
-
 
 workflows:
   version: 2
   deploy:
     jobs:
       - build_and_deploy
-
