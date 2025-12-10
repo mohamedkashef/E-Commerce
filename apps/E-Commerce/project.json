@@ -25,10 +25,7 @@
         "ssr": {
           "entry": "apps/E-Commerce/src/server.ts"
         },
-        "outputMode": "server",
-      "bundleFileName": {
-        "server": "server.mjs"
-      }
+        "outputMode": "server"
       },
       "configurations": {
         "production": {
