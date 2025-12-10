@@ -1,0 +1,6 @@
+[build]
+  command = "npx nx build E-Commerce"
+  publish = "dist/apps/E-Commerce/browser"
+
+[[plugins]]
+  package = "@netlify/angular-runtime"
